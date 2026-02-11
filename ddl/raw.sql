@@ -39,9 +39,9 @@ CREATE TABLE doctors (
 -- APPOINTMENTS
 -- =====================================================
 CREATE TABLE appointments (
-    appointment_id    INTEGER PRIMARY KEY,
-    patient_id        INTEGER NOT NULL,
-    doctor_id         INTEGER NOT NULL,
+    appointment_id    VARCHAR(10) PRIMARY KEY,
+    patient_id        VARCHAR(10) NOT NULL,
+    doctor_id         VARCHAR(10) NOT NULL,
     appointment_date  DATE,
     appointment_time  TIME,
     reason_for_visit  TEXT,
@@ -55,6 +55,7 @@ CREATE TABLE appointments (
         FOREIGN KEY (doctor_id)
         REFERENCES doctors(doctor_id)
 );
+
 
 -- =====================================================
 -- TREATMENTS
