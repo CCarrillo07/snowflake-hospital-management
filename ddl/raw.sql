@@ -8,7 +8,7 @@ SET search_path TO hospital;
 -- PATIENTS
 -- =====================================================
 CREATE TABLE patients (
-    patient_id         INTEGER PRIMARY KEY,
+    patient_id         VARCHAR(10) PRIMARY KEY,
     first_name         VARCHAR(100),
     last_name          VARCHAR(100),
     gender             VARCHAR(20),
@@ -25,7 +25,7 @@ CREATE TABLE patients (
 -- DOCTORS
 -- =====================================================
 CREATE TABLE doctors (
-    doctor_id         INTEGER PRIMARY KEY,
+    doctor_id         VARCHAR(10) PRIMARY KEY,
     first_name        VARCHAR(100),
     last_name         VARCHAR(100),
     specialization    VARCHAR(150),
@@ -56,13 +56,12 @@ CREATE TABLE appointments (
         REFERENCES doctors(doctor_id)
 );
 
-
 -- =====================================================
 -- TREATMENTS
 -- =====================================================
 CREATE TABLE treatments (
-    treatment_id      INTEGER PRIMARY KEY,
-    appointment_id    INTEGER NOT NULL,
+    treatment_id      VARCHAR(10) PRIMARY KEY,
+    appointment_id    VARCHAR(10) NOT NULL,
     treatment_type    VARCHAR(150),
     description       TEXT,
     cost              NUMERIC(12,2),
@@ -77,9 +76,9 @@ CREATE TABLE treatments (
 -- BILLING
 -- =====================================================
 CREATE TABLE billing (
-    bill_id          INTEGER PRIMARY KEY,
-    patient_id       INTEGER NOT NULL,
-    treatment_id     INTEGER NOT NULL,
+    bill_id          VARCHAR(10) PRIMARY KEY,
+    patient_id       VARCHAR(10) NOT NULL,
+    treatment_id     VARCHAR(10) NOT NULL,
     bill_date        DATE,
     amount           NUMERIC(12,2),
     payment_method   VARCHAR(50),
