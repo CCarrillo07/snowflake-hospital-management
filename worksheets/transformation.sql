@@ -57,7 +57,7 @@ LANGUAGE SQL
 AS
 $$
 BEGIN
-    INSERT OVERWRITE INTO harmonized.patients
+    INSERT INTO harmonized.patients
     SELECT
         patient_id,
         first_name,
@@ -128,7 +128,7 @@ LANGUAGE SQL
 AS
 $$
 BEGIN
-    INSERT OVERWRITE INTO harmonized.doctors
+    INSERT INTO harmonized.doctors
     SELECT
         doctor_id,
         first_name,
@@ -194,7 +194,7 @@ LANGUAGE SQL
 AS
 $$
 BEGIN
-    INSERT OVERWRITE INTO harmonized.appointments
+    INSERT INTO harmonized.appointments
     SELECT
         appointment_id,
         patient_id,
@@ -254,7 +254,7 @@ LANGUAGE SQL
 AS
 $$
 BEGIN
-    INSERT OVERWRITE INTO harmonized.treatments
+    INSERT INTO harmonized.treatments
     SELECT
         treatment_id,
         appointment_id,
@@ -323,7 +323,7 @@ LANGUAGE SQL
 AS
 $$
 BEGIN
-    INSERT OVERWRITE INTO harmonized.billing
+    INSERT INTO harmonized.billing
     SELECT
          bill_id,
     patient_id,
@@ -351,3 +351,297 @@ CALL automation.sp_transform_billing();
 
 SELECT * 
 FROM harmonized.billing;
+
+
+---------------------------------------------
+------Patients table incremental load--------
+---------------------------------------------
+
+CREATE OR REPLACE STREAM raw.patients_stream
+ON TABLE raw.patients
+APPEND_ONLY = TRUE;
+
+SELECT * FROM raw.patients_stream;
+
+INSERT INTO raw.patients (
+    patient_id,
+    first_name,
+    last_name,
+    gender,
+    date_of_birth,
+    contact_number,
+    address,
+    registration_date,
+    insurance_provider,
+    insurance_number,
+    email
+)
+VALUES (
+    'P999',
+    'Emily',
+    'Johnson',
+    'Female',
+    '26/12/1997',
+    '555-321-7788',
+    '742 Evergreen Terrace',
+    '16/02/2025',
+    'Blue Cross Blue Shield',
+    'BCBS-998877',
+    'EMILY.JOHNSON@EMAIL.COM'
+);
+
+SELECT * FROM raw.patients_stream;
+
+SELECT * FROM raw.patients
+ORDER BY patient_id;
+
+CREATE OR REPLACE PROCEDURE automation.sp_transform_patients()
+RETURNS STRING
+LANGUAGE SQL
+AS
+$$
+BEGIN
+    INSERT INTO harmonized.patients
+    SELECT
+        patient_id,
+        first_name,
+        last_name,
+        CASE
+            WHEN LOWER(gender) = 'female' THEN 'F'
+            WHEN LOWER(gender) = 'male' THEN 'M'
+            ELSE 'O'
+        END AS gender,
+        TO_DATE(date_of_birth, 'DD/MM/YYYY') AS date_of_birth,
+        REGEXP_REPLACE(contact_number, '[^0-9]', '') AS contact_number,
+        address,
+        TO_DATE(registration_date, 'DD/MM/YYYY') AS registration_date,
+        insurance_provider,
+        insurance_number,
+        LOWER(email) AS email
+    FROM raw.patients_stream;
+
+    RETURN 'Patients table transformation completed successfully';
+END;
+$$;
+
+CREATE OR REPLACE TASK automation.transform_patients
+TARGET_COMPLETION_INTERVAL = '5 MINUTES'
+WHEN SYSTEM$STREAM_HAS_DATA('raw.patients_stream')
+AS
+CALL automation.sp_transform_patients();
+
+ALTER TASK automation.transform_patients RESUME;
+
+SELECT * FROM harmonized.patients;
+
+SELECT * FROM raw.patients_stream;
+
+INSERT INTO raw.patients (
+    patient_id,
+    first_name,
+    last_name,
+    gender,
+    date_of_birth,
+    contact_number,
+    address,
+    registration_date,
+    insurance_provider,
+    insurance_number,
+    email
+)
+VALUES (
+    'P1000',
+    'Michael',
+    'Anderson',
+    'Male',
+    '14/03/1988',
+    '555-874-2233',
+    '1600 Pennsylvania Avenue',
+    '17/02/2025',
+    'UnitedHealthcare',
+    'UHC-445566',
+    'MICHAEL.ANDERSON@EMAIL.COM'
+);
+
+SELECT * FROM harmonized.patients;
+
+SELECT * FROM raw.patients_stream;
+
+---------------------------------------------
+-------Doctors table incremental load--------
+---------------------------------------------
+
+SELECT * FROM harmonized.doctors; --10 records
+
+CREATE OR REPLACE STREAM raw.doctors_stream
+ON TABLE raw.doctors
+APPEND_ONLY = TRUE;
+
+CREATE OR REPLACE PROCEDURE automation.sp_transform_doctors()
+RETURNS STRING
+LANGUAGE SQL
+AS
+$$
+BEGIN
+    INSERT INTO harmonized.doctors
+    SELECT
+        doctor_id,
+        first_name,
+        last_name,
+        INITCAP(specialization) AS specialization,
+        REGEXP_REPLACE(phone_number, '[^0-9]', '') AS phone_number,
+        years_experience,
+        hospital_branch,
+        LOWER(email) AS email,
+    FROM raw.doctors_stream;
+
+    RETURN 'Doctors table transformation completed successfully';
+END;
+$$;
+
+CREATE OR REPLACE TASK automation.transform_doctors
+TARGET_COMPLETION_INTERVAL = '5 MINUTES'
+WHEN SYSTEM$STREAM_HAS_DATA('raw.doctors_stream')
+AS
+CALL automation.sp_transform_doctors();
+
+ALTER TASK automation.transform_doctors RESUME;
+
+SELECT * FROM harmonized.doctors;
+
+---------------------------------------------
+----Appointments table incremental load------
+---------------------------------------------
+
+SELECT * FROM harmonized.appointments; --66 records
+
+CREATE OR REPLACE STREAM raw.appointments_stream
+ON TABLE raw.appointments
+APPEND_ONLY = TRUE;
+
+CREATE OR REPLACE PROCEDURE automation.sp_transform_appointments()
+RETURNS STRING
+LANGUAGE SQL
+AS
+$$
+BEGIN
+    INSERT INTO harmonized.appointments
+    SELECT
+        appointment_id,
+        patient_id,
+        doctor_id,
+        TO_DATE(appointment_date, 'YYYY-MM-DD') AS appointment_date,
+        CASE 
+            -- If contains AM or PM → parse 12-hour input
+            WHEN UPPER(appointment_time) LIKE '%AM%' 
+            OR UPPER(appointment_time) LIKE '%PM%' 
+            THEN TO_TIME(appointment_time, 'HH12:MI AM')
+            -- Otherwise assume 24-hour with seconds
+            ELSE TO_TIME(appointment_time, 'HH24:MI:SS')
+        END AS appointment_time,
+        reason_for_visit,
+        status
+    FROM raw.appointments_stream;
+
+    RETURN 'Appointments table transformation completed successfully';
+END;
+$$;
+
+CREATE OR REPLACE TASK automation.transform_appointments
+TARGET_COMPLETION_INTERVAL = '5 MINUTES'
+WHEN SYSTEM$STREAM_HAS_DATA('raw.appointments_stream')
+AS
+CALL automation.sp_transform_appointments();
+
+ALTER TASK automation.transform_appointments RESUME;
+
+SELECT * FROM harmonized.appointments; --132 records
+
+---------------------------------------------
+-----Treatments table incremental load-------
+---------------------------------------------
+
+SELECT * FROM harmonized.treatments; --66 records
+
+CREATE OR REPLACE STREAM raw.treatments_stream
+ON TABLE raw.treatments
+APPEND_ONLY = TRUE;
+
+CREATE OR REPLACE PROCEDURE automation.sp_transform_treatments()
+RETURNS STRING
+LANGUAGE SQL
+AS
+$$
+BEGIN
+    INSERT INTO harmonized.treatments
+    SELECT
+        treatment_id,
+        appointment_id,
+        treatment_type,
+        description, 
+        TO_DATE(treatment_date, 'DD/MM/YYYY') as treatment_date
+    FROM raw.treatments_stream;
+
+    RETURN 'Treatments table transformation completed successfully';
+    
+END;
+$$;
+
+CREATE OR REPLACE TASK automation.transform_treatments
+TARGET_COMPLETION_INTERVAL = '5 MINUTES'
+WHEN SYSTEM$STREAM_HAS_DATA('raw.treatments_stream')
+AS
+CALL automation.sp_transform_treatments();
+
+ALTER TASK automation.transform_treatments RESUME;
+
+SELECT * FROM harmonized.treatments; --132 records
+
+---------------------------------------------
+--------Billing table incremental load-------
+---------------------------------------------
+
+SELECT * FROM harmonized.billing; --66 records
+
+CREATE OR REPLACE STREAM raw.billing_stream
+ON TABLE raw.billing
+APPEND_ONLY = TRUE;
+
+CREATE OR REPLACE PROCEDURE automation.sp_transform_billing()
+RETURNS STRING
+LANGUAGE SQL
+AS
+$$
+BEGIN
+    INSERT INTO harmonized.billing
+    SELECT
+         bill_id,
+    patient_id,
+    treatment_id,
+    TO_DATE(bill_date, 'DD/MM/YYYY') AS bill_date,
+    REGEXP_REPLACE(amount, '[^0-9.]', '') AS amount,
+    CASE
+    WHEN LOWER(REPLACE(payment_method,' ','')) = 'insurance'
+        THEN 'Insurance'
+    WHEN LOWER(REPLACE(payment_method,' ','')) = 'creditcard'
+        THEN 'Credit Card'
+    WHEN LOWER(REPLACE(payment_method,' ','')) = 'cash'
+        THEN 'Cash'
+    ELSE 'Unknown'
+    END AS payment_method,
+    payment_status
+    FROM raw.billing_stream;
+
+    RETURN 'Billing table transformation completed successfully';
+END;
+$$;
+
+CREATE OR REPLACE TASK automation.transform_billing
+TARGET_COMPLETION_INTERVAL = '5 MINUTES'
+WHEN SYSTEM$STREAM_HAS_DATA('raw.billing_stream')
+AS
+CALL automation.sp_transform_billing();
+
+ALTER TASK automation.transform_billing RESUME;
+
+SELECT * FROM harmonized.billing; --132 records
