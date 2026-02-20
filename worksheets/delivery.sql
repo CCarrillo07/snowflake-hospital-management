@@ -324,5 +324,3 @@ GROUP BY tr.treatment_type
 ORDER BY avg_treatment_cost DESC;
 
 SELECT * FROM analytics.v_avg_treatment_cost_by_type;
-
-SELECT * FROM analytics.v_avg_treatment_cost_by_type;
