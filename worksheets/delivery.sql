@@ -271,3 +271,58 @@ ALTER TASK automation.load_fact_billing RESUME;
 -- One line of code is intentionally missing here.
 
 SELECT * FROM analytics.fact_billing;
+
+---------------------------------------------
+---------------Create views------------------
+---------------------------------------------
+
+-- ============================================================
+-- View: v_doctor_count_by_specialization
+-- Description: This view calculates the total number of doctors per specialization.
+-- ============================================================
+
+CREATE OR REPLACE VIEW analytics.v_doctor_count_by_specialization AS
+SELECT 
+    dr.specialization,
+    COUNT(dr.specialization) AS doctor_count
+FROM dim_doctors dr
+GROUP BY dr.specialization;
+
+SELECT * FROM analytics.v_doctor_count_by_specialization;
+
+-- ============================================================
+-- View: v_patient_treatment_details
+-- Description: This view provides detailed information about patient treatments.
+-- ============================================================
+
+CREATE OR REPLACE VIEW analytics.v_patient_treatment_details AS
+SELECT
+    p.first_name || ' ' || p.last_name AS patient_name,
+    app.appointment_date,
+    tr.treatment_type,
+    tr.description AS treatment_description,
+    b.amount AS treatment_cost
+FROM analytics.fact_treatments tr
+JOIN analytics.fact_appointments app ON app.appointment_id = tr.appointment_id
+JOIN analytics.fact_billing b ON b.treatment_id = tr.treatment_id
+JOIN analytics.dim_patients p ON p.patient_id = b.patient_id; 
+
+SELECT * FROM analytics.v_patient_treatment_details;
+
+-- ============================================================
+-- View: v_avg_treatment_cost_by_type
+-- Description: This view calculates the average cost per treatment type.
+-- ============================================================
+
+CREATE OR REPLACE VIEW analytics.v_avg_treatment_cost_by_type AS
+SELECT 
+    tr.treatment_type,
+    ROUND(AVG(b.amount),2) AS avg_treatment_cost
+FROM analytics.fact_treatments tr
+JOIN analytics.fact_billing b ON b.treatment_id = tr.treatment_id
+GROUP BY tr.treatment_type
+ORDER BY avg_treatment_cost DESC;
+
+SELECT * FROM analytics.v_avg_treatment_cost_by_type;
+
+SELECT * FROM analytics.v_avg_treatment_cost_by_type;
